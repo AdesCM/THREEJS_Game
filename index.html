@@ -1,0 +1,761 @@
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="utf-8">
+    <title>My first three.js app</title>
+    <style>
+      body { margin: 0; }
+      canvas { display: block; }
+      #console {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background-color: rgba(255, 255, 255, 0.7);
+        color: #000000;
+        padding: 10px;
+        box-sizing: border-box;
+        overflow-y: auto;
+        max-height: 100px;
+      }
+      #hpBar {
+        position: absolute;
+        top: 30px;
+        left: 550px;
+        width: 500px;
+        height: 20px;
+        border: 1px solid #000;
+        background-color: #ff0000;
+      }
+      #hpValue {
+        height: 100%;
+        background-color: #00ff00;
+      }
+    </style>
+  </head>
+  <body>
+  <div id="hpBar">
+    <div id="hpValue"></div>
+  </div>
+  <div id="console"></div>
+  <script type="module">
+
+    import * as THREE from 'https://unpkg.com/three/build/three.module.js';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const geometry = new THREE.BoxGeometry(4, 4, 2);
+    const geometry4 = new THREE.BoxGeometry(8, 4, 2);
+    const materialGreen = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    const materialRed = new THREE.MeshBasicMaterial({color: 0xff0000});
+    const bossPart1 = new THREE.Mesh(geometry, materialRed);
+    const bossPart2 = new THREE.Mesh(geometry4, materialGreen)
+    const bossPart3 = new THREE.Mesh(geometry4, materialGreen);
+
+
+    // bossPart1에 대한 와이어프레임 생성
+    const edgesGeometry1 = new THREE.EdgesGeometry(geometry);
+    const edgesMaterial1 = new THREE.LineBasicMaterial({ color: 0x000000 });
+    const wireframe1 = new THREE.LineSegments(edgesGeometry1, edgesMaterial1);
+    bossPart1.add(wireframe1);
+
+    // bossPart2에 대한 와이어프레임 생성
+    const edgesGeometry2 = new THREE.EdgesGeometry(geometry4);
+    const edgesMaterial2 = new THREE.LineBasicMaterial({ color: 0x000000 });
+    const wireframe2 = new THREE.LineSegments(edgesGeometry2, edgesMaterial2);
+    bossPart2.add(wireframe2);
+
+    // bossPart3에 대한 와이어프레임 생성
+    const edgesGeometry3 = new THREE.EdgesGeometry(geometry4);
+    const edgesMaterial3 = new THREE.LineBasicMaterial({ color: 0x000000 });
+    const wireframe3 = new THREE.LineSegments(edgesGeometry3, edgesMaterial3);
+    bossPart3.add(wireframe3);
+
+    scene.add(bossPart1);
+    scene.add(bossPart2);
+    scene.add(bossPart3);
+
+    const geometry2 = new THREE.SphereGeometry(1, 32, 16);
+    const material2 = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    const sphere = new THREE.Mesh(geometry2, material2);
+    scene.add(sphere);
+
+    const geometry3 = new THREE.BoxGeometry(100, 50, 1);
+    const material3 = new THREE.MeshBasicMaterial({ color: 0x00001f });
+    const stage = new THREE.Mesh(geometry3, material3);
+    stage.position.z = -5;
+    scene.add(stage);
+
+    // 주인공 변수 모음
+    var sphereVelocityX = 0.0;
+    var sphereVelocityY = 0.0;
+    var movingSpeed = 0.1;
+    sphere.position.x = -10;
+    sphere.position.y = 0;
+    sphere.position.z = 0;
+    var playerHp = 3;
+
+
+
+    // 적군 변수 모음
+
+
+    //보스 변수 모음
+    bossPart1.position.x = 30;
+    bossPart2.position.x = 30;
+    bossPart2.position.y = 4;
+    bossPart1.position.z = 0;
+    bossPart1.position.z = 0;
+    bossPart3.position.set(30,-4,0);
+    var bossHp = 500;
+    var bossMoveSpeed = 0.05;
+    var bossDirection = true;
+
+    // 벡터 설정
+    var up = new THREE.Vector3(0,1,0);
+    var down = new THREE.Vector3(0,-1,0);
+    var left = new THREE.Vector3(-1,0,0);
+    var slowLeft = new THREE.Vector3(-0.5,0,0);
+    var right = new THREE.Vector3(1,0,0);
+
+
+
+
+    var test = true;
+
+
+    const bullets = []; // 총알을 저장하는 배열
+    const bossBullet = []; // boss의 총알을 저장하는 배열
+    camera.position.z = 25;
+
+
+
+    var solidAttackCooldown = 2000; // solidAttack 쿨다운 시간 (2초)
+    var solidAttackTimer = solidAttackCooldown; // 초기 설정
+
+    var patternCooldown = 10000; // 패턴 쿨다운 시간 (10초)
+    var patternTimer = patternCooldown; // 초기 설정
+
+
+
+
+    // hp 갯수 관리를 위한 오브젝트
+    const playerHpSpheres = [];
+
+
+    // 초기화 시, playerHp 수만큼 Sphere 생성
+    for (let i = 0; i < playerHp; i++)
+    {
+      createPlayerHpSphere(i);
+    }
+
+    function createPlayerHpSphere(index)
+    {
+      const playerHpGeometry = new THREE.SphereGeometry(1, 32, 16);
+      const playerHpMaterial = new THREE.MeshBasicMaterial({ color: 0xff55ff });
+      const playerHpSphere = new THREE.Mesh(playerHpGeometry, playerHpMaterial);
+      playerHpSphere.position.x = -32 + index * 4; // 간격 조절
+      playerHpSphere.position.y = 12; // 고정 위치
+      playerHpSphere.position.z = 3
+      scene.add(playerHpSphere);
+      playerHpSpheres.push(playerHpSphere);
+    }
+
+    function removePlayerHpSphere()
+    {
+      const removedSphere = playerHpSpheres.pop();
+      if (removedSphere) {
+        scene.remove(removedSphere);
+      }
+    }
+
+    // 음악 관련
+    var musicCapcher = new THREE.AudioListener();
+    camera.add( musicCapcher );
+
+    var shoot = new THREE.Audio( musicCapcher );
+    var mainbgm = new THREE.Audio( musicCapcher );
+    var damage = new THREE.Audio( musicCapcher );
+    var bomb = new THREE.Audio( musicCapcher );
+
+    var musicLoader = new THREE.AudioLoader();
+
+
+    musicLoader.load(
+            'music/laser.mp3',
+            function( buffer ) { // 파일 로드가 완료된 뒤
+              shoot.setBuffer( buffer ); // '배경음'객체에 음악파일 할당
+              shoot.setLoop( false ); // 반복재생 여부
+              shoot.setVolume( 0.5 ); // 볼륨설정
+               // 재생시작
+            }
+    );
+
+    musicLoader.load(
+            'music/mainbgm.mp3',
+            function( buffer2 ) { // 파일 로드가 완료된 뒤
+              mainbgm.setBuffer( buffer2 ); // '배경음'객체에 음악파일 할당
+              mainbgm.setLoop( true ); // 반복재생 여부
+              mainbgm.setVolume( 0.5 ); // 볼륨설정
+              mainbgm.play();
+              // 재생시작
+            }
+    );
+
+    musicLoader.load(
+            'music/damage.wav',
+            function( buffer3 ) { // 파일 로드가 완료된 뒤
+              damage.setBuffer( buffer3 ); // '배경음'객체에 음악파일 할당
+              damage.setLoop( false ); // 반복재생 여부
+              damage.setVolume( 0.5 ); // 볼륨설정
+              // 재생시작
+            }
+    );
+
+    musicLoader.load(
+            'music/bomb.wav',
+            function( buffer3 ) { // 파일 로드가 완료된 뒤
+              bomb.setBuffer( buffer3 ); // '배경음'객체에 음악파일 할당
+              bomb.setLoop( false ); // 반복재생 여부
+              bomb.setVolume( 0.2 ); // 볼륨설정
+              // 재생시작
+            }
+    );
+
+
+    function animate()
+    {
+
+      solidAttackTimer -= 16.67; // 60fps 기준으로 1프레임당 16.67ms
+      if (solidAttackTimer <= 0) {
+        solidAttack();
+        solidAttackTimer = solidAttackCooldown; // 쿨다운 초기화
+      }
+
+      // 패턴 쿨다운 카운트 다운
+      patternTimer -= 16.67; // 60fps 기준으로 1프레임당 16.67ms
+      if (patternTimer <= 0) {
+        // 랜덤 패턴 선택
+        var randomPattern = Math.floor(Math.random() * 3);
+        switch (randomPattern) {
+          case 0:
+            updownPattern();
+            break;
+          case 1:
+            coneBulletPattern();
+            break;
+          case 2:
+            stairsBulletPattern();
+            break;
+        }
+        patternTimer = patternCooldown; // 쿨다운 초기화
+      }
+
+
+
+
+      // 부드러운 이동을 위한 키보드 미입력시 가속도 초기화
+      sphereVelocityY = 0;
+      sphereVelocityX = 0;
+      if(keys.a.pressed)
+      {
+        sphereVelocityX = -movingSpeed;
+      }
+      else if(keys.d.pressed)
+      {
+        sphereVelocityX = movingSpeed;
+      }
+
+      if(keys.w.pressed)
+      {
+        sphereVelocityY = movingSpeed;
+      }
+      else if(keys.s.pressed)
+      {
+        sphereVelocityY = -movingSpeed;
+      }
+
+      // 업데이트
+      update();
+      // 보스 이동
+      randomizeMoveWithBoss();
+
+
+
+      // 보스의 총알의 충돌 체크
+      for (let i = bossBullet.length - 1; i >= 0; i--) {
+        const bossBullets = bossBullet[i];
+        bossBullets.position.add(bossBullets.direction);
+
+        // 유저와 충돌 체크
+        if (bossBullets.position.distanceTo(sphere.position) < 1) {
+          // 충돌하면 총알 삭제
+          bossBullet.splice(i, 1);
+          scene.remove(bossBullets);
+
+          // 총알 삭제 조건
+          if(bossBullets.position.x < -50)
+          {
+            scene.remove(bossBullets);
+          }
+
+          const originalColor = sphere.material.color.clone();
+          sphere.material.color.set(0x888888); // 회색 (원하는 색상으로 변경 가능)
+
+          // 일정 시간 후에 다시 색상을 원래대로 되돌립니다.
+          setTimeout(() => {
+            sphere.material.color.copy(originalColor);
+          }, 5); // 500ms 후에 원래 색상으로 복구 (조절 가능)
+          playerHp -= 1;
+          damage.play();
+          removePlayerHpSphere();
+        }
+      }
+
+      //  유저의 총알 업데이트
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const bullet = bullets[i];
+        bullet.position.add(right); // 벡터로 이동
+
+        // 충돌 체크
+        if (bullet.position.distanceTo(bossPart1.position) < 2) {
+          // 충돌하면 총알 삭제
+          bullets.splice(i, 1);
+          scene.remove(bullet);
+
+          const originalColor = bossPart1.material.color.clone();
+          bossPart1.material.color.set(0x888888); // 회색 (원하는 색상으로 변경 가능)
+
+          // 일정 시간 후에 다시 색상을 원래대로 되돌립니다.
+          setTimeout(() => {
+            bossPart1.material.color.copy(originalColor);
+          }, 5); // 500ms 후에 원래 색상으로 복구 (조절 가능)
+
+
+          bossHp -= 1;
+          updateHpBar();
+        }
+        // part 2 충돌 처리
+        if (bullet.position.distanceTo(bossPart2.position) < 2) {
+          // 충돌하면 총알 삭제
+          bullets.splice(i, 1);
+          scene.remove(bullet);
+          bossHp += 0.2;
+          updateHpBar();
+        }
+        // part 3 충돌 처리
+        if (bullet.position.distanceTo(bossPart3.position) < 2) {
+          // 충돌하면 총알 삭제
+          bullets.splice(i, 1);
+          scene.remove(bullet);
+          bossHp += 0.2;
+          updateHpBar();
+        }
+
+
+        // 일정 이상 나아간 불릿 삭제
+        if (bullet.position.x > 50) {
+          scene.remove(bullet);
+        }
+      }
+
+
+
+        // bossHp가 0 이하인지 확인
+        if (bossHp <= 0) {
+          // "Clear" 메시지를 화면 중앙에 표시
+          const clearMessage = document.createElement('div');
+          clearMessage.style.position = 'absolute';
+          clearMessage.style.top = '50%';
+          clearMessage.style.left = '50%';
+          clearMessage.style.transform = 'translate(-50%, -50%)';
+          clearMessage.style.fontSize = '36px';
+          clearMessage.style.color = '#000000';
+          clearMessage.innerText = 'Game Clear!';
+
+          // 기존 캔버스 엘리먼트 제거
+          document.body.removeChild(renderer.domElement);
+
+          // "Clear" 메시지를 body에 추가
+          document.body.appendChild(clearMessage);
+
+          // 애니메이션 루프 중지
+        }
+        if (playerHp <= 0) {
+          // "Clear" 메시지를 화면 중앙에 표시
+          const clearMessage = document.createElement('div');
+          clearMessage.style.position = 'absolute';
+          clearMessage.style.top = '50%';
+          clearMessage.style.left = '50%';
+          clearMessage.style.transform = 'translate(-50%, -50%)';
+          clearMessage.style.fontSize = '36px';
+          clearMessage.style.color = '#000000';
+          clearMessage.innerText = 'Game Over!';
+
+          // 기존 캔버스 엘리먼트 제거
+          document.body.removeChild(renderer.domElement);
+
+          // "Clear" 메시지를 body에 추가
+          document.body.appendChild(clearMessage);
+
+          // 애니메이션 루프 중지
+        }
+
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+
+    // 애니메이트 끝
+
+
+
+    function randomizeMoveWithBoss()
+    {
+      if(bossPart1.position.y > 11)
+      {
+        bossDirection = false;
+      }
+
+      if(bossPart1.position.y < -11)
+      {
+        bossDirection = true;
+      }
+      if(bossDirection)
+      {
+        bossPart1.position.y += bossMoveSpeed;
+      }
+      else
+      {
+        bossPart1.position.y -= bossMoveSpeed;
+      }
+      if(bossDirection)
+      {
+        bossPart2.position.y += bossMoveSpeed;
+      }
+      else
+      {
+        bossPart2.position.y -= bossMoveSpeed;
+      }
+      if(bossDirection)
+      {
+        bossPart3.position.y += bossMoveSpeed;
+      }
+      else
+      {
+        bossPart3.position.y -= bossMoveSpeed;
+      }
+    }
+
+    function displayMessage(message) {
+      const consoleDiv = document.getElementById('console');
+      consoleDiv.innerHTML += `<p>${message}</p>`;
+      consoleDiv.scrollTop = consoleDiv.scrollHeight;
+    }
+
+    const keys = {
+      a: { pressed: false},
+      d: { pressed: false},
+      w: { pressed: false},
+      s: { pressed: false}
+    }
+    // 스페이스 키 이벤트 리스너
+
+    document.addEventListener('keydown', (event) =>
+    {
+      switch (event.code)
+      {
+        case 'Space':
+          shootBullet(event);
+          break;
+
+        default:
+          break;
+      }
+      if (event.code === 'KeyA') {
+        keys.a.pressed = true;
+      }
+      // 오른쪽
+      if (event.code === 'KeyD') {
+        keys.d.pressed = true;
+      }
+      // 위
+      if (event.code === 'KeyW') {
+        keys.w.pressed = true;
+      }
+      // 아래
+      if (event.code === 'KeyS') {
+        keys.s.pressed = true;
+      }
+    });
+
+
+
+    document.addEventListener('keyup', (event) =>
+    {
+      switch (event.code)
+      {
+        case 'Space':
+          shootBullet(event);
+          break;
+
+        default:
+          break;
+      }
+      if (event.code === 'KeyA') {
+        keys.a.pressed = false;
+      }
+      // 오른쪽
+      if (event.code === 'KeyD') {
+        keys.d.pressed = false;
+      }
+      // 위
+      if (event.code === 'KeyW') {
+        keys.w.pressed = false;
+      }
+      // 아래
+      if (event.code === 'KeyS') {
+        keys.s.pressed = false;
+      }
+    });
+
+    // 총알을 발사하는 함수
+    function shootBullet(event) {
+      // 총알 생성
+      const bulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+      const bulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+      const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+
+      // 총알 초기 위치 설정
+      bullet.position.copy(sphere.position);
+
+
+      // 총알을 씬에 추가
+      scene.add(bullet);
+
+      // 총알을 배열에 추가
+      bullets.push(bullet);
+      shoot.play();
+    }
+
+
+    function randint(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    // 보스 기본 공격
+    function solidAttack()
+    {
+      const bossbulletGeometry = new THREE.SphereGeometry(0.2, 8, 8);
+      const bossbulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const bossbullets = new THREE.Mesh(bossbulletGeometry, bossbulletMaterial);
+
+      var randomK = randint(0,1);
+
+      if(randomK === 1)
+      {
+        bossbullets.position.copy(bossPart2.position);
+      }
+      else
+      {
+        bossbullets.position.copy(bossPart3.position);
+      }
+      bossbullets.direction = slowLeft;
+      // 총알 초기 위치 설정
+
+      // 총알을 씬에 추가
+      scene.add(bossbullets);
+      // 총알을 배열에 추가
+      bossBullet.push(bossbullets);
+    }
+
+    function normalAttack(position, direction)
+    {
+      const bossbulletGeometry = new THREE.SphereGeometry(7, 8, 8);
+      const bossbulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const bossbullets = new THREE.Mesh(bossbulletGeometry, bossbulletMaterial);
+
+      bossbullets.position.x = position.x;
+      bossbullets.position.y = position.y;
+      bossbullets.position.z = position.z;
+      bossbullets.direction = direction;
+
+      scene.add(bossbullets);
+      bossBullet.push(bossbullets);
+    }
+
+
+    // 보스 패턴 1
+    function updownPattern()
+    {
+      const warningGeometry = new THREE.BoxGeometry(100, 20, 1);
+      const warningMaterial = new THREE.MeshBasicMaterial({color: 0xff0000});
+      const warningSign = new THREE.Mesh(warningGeometry, warningMaterial);
+      const warningSign2 = new THREE.Mesh(warningGeometry, warningMaterial);
+
+      warningSign.position.set(7.5, 15, -2);
+      warningSign2.position.set(7.5, -15, -2);
+
+      scene.add(warningSign);
+      scene.add(warningSign2);
+
+      setTimeout(() => {
+        scene.remove(warningSign);
+        scene.remove(warningSign2);
+        const warningMaterial2 = new THREE.MeshBasicMaterial({color: 0xCF3703});
+        const damageFloor = new THREE.Mesh(warningGeometry, warningMaterial2);
+        const damageFloor2 = new THREE.Mesh(warningGeometry, warningMaterial2);
+
+        damageFloor.position.set(7.5, 15, 0);
+        damageFloor2.position.set(7.5, -15, 0);
+
+        scene.add(damageFloor);
+        scene.add(damageFloor2);
+        bomb.play();
+
+
+        // damageFloor의 박스 충돌체 생성
+        const damageFloorBox = new THREE.Box3().setFromObject(damageFloor);
+        const damageFloor2Box = new THREE.Box3().setFromObject(damageFloor2);
+        const sphereBox = new THREE.Box3().setFromObject(sphere);
+
+  // 충돌 검출
+        if (damageFloorBox.intersectsBox(sphereBox)) {
+          playerHp -= 1;
+          damage.play();
+          removePlayerHpSphere();
+          const originalColor = sphere.material.color.clone();
+          sphere.material.color.set(0x888888); // 회색 (원하는 색상으로 변경 가능)
+          // 일정 시간 후에 다시 색상을 원래대로 되돌립니다.
+          setTimeout(() => {
+            sphere.material.color.copy(originalColor);
+          }, 500); // 500ms 후에 원래 색상으로 복구 (조절 가능)
+        }
+
+        if (damageFloor2Box.intersectsBox(sphereBox)) {
+          playerHp -= 1;
+          damage.play();
+          removePlayerHpSphere();
+          const originalColor = sphere.material.color.clone();
+          sphere.material.color.set(0x888888); // 회색 (원하는 색상으로 변경 가능)
+          // 일정 시간 후에 다시 색상을 원래대로 되돌립니다.
+          setTimeout(() => {
+            sphere.material.color.copy(originalColor);
+          }, 500); // 500ms 후에 원래 색상으로 복구 (조절 가능)
+        }
+
+        setTimeout(() =>
+        {
+          scene.remove(damageFloor);
+          scene.remove(damageFloor2);
+        }, 1000)
+
+      }, 3000); // 500ms 후에 원래 색상으로 복구 (조절 가능)
+
+    }
+
+    // 보스 패턴 2
+    function coneBulletPattern()
+    {
+      const bossbulletGeometry = new THREE.SphereGeometry(1, 8, 8);
+      const bossbulletMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+      for(let i = 0; i < 7; i++)
+      {
+        setTimeout(() => {
+          for(let j = 0; j <7; j++)
+          {
+            var angle =  (210 - 10 * j) * Math.PI / 180
+
+            const bossbullets = new THREE.Mesh(bossbulletGeometry, bossbulletMaterial);
+            bossbullets.direction = new THREE.Vector3(Math.cos(angle)/4,Math.sin(angle)/4,0);
+            bossbullets.position.copy(bossPart1.position);
+            // 총알을 씬에 추가
+            scene.add(bossbullets);
+            // 총알을 배열에 추가
+            bossBullet.push(bossbullets);
+          }
+        }
+        , i * 500);
+      }
+    }
+
+
+    // 보스 패턴 3
+    function stairsBulletPattern()
+    {
+      const warningGeometry = new THREE.BoxGeometry(100, 11.5, 1);
+      const warningMaterial = new THREE.MeshBasicMaterial({color: 0xff0000});
+      const warningSign = new THREE.Mesh(warningGeometry, warningMaterial);
+      const warningSign2 = new THREE.Mesh(warningGeometry, warningMaterial);
+      const warningSign3 = new THREE.Mesh(warningGeometry, warningMaterial);
+
+      warningSign.position.set(7.5, 13, -2);
+      warningSign2.position.set(7.5, 0, -2);
+      warningSign3.position.set(7.5, -13 ,-2);
+
+      scene.add(warningSign);
+
+
+
+      setTimeout(() => {
+        scene.add(warningSign2);
+        scene.remove(warningSign);
+        normalAttack(new THREE.Vector3(70, 13, 0), left);
+
+
+
+        setTimeout(() => {
+          scene.add(warningSign3);
+          scene.remove(warningSign2);
+          normalAttack(new THREE.Vector3(70, 0, 0), left);
+
+
+          setTimeout(() => {
+            scene.remove(warningSign3);
+            normalAttack(new THREE.Vector3(70, -13, 0), left);
+
+
+            setTimeout(() => {
+
+            }, 1000);
+          }, 1000);
+        }, 1000);
+      }, 1000);
+
+    }
+
+
+
+    function update()
+    {
+      sphere.position.x += sphereVelocityX;
+      sphere.position.y += sphereVelocityY;
+      updateHpBar();
+    }
+    function updateHpBar() {
+      const hpBar = document.getElementById('hpValue');
+      hpBar.style.width = `${(bossHp / 500) * 100}%`;
+    }
+
+
+
+
+    /*
+      document.addEventListener('click', (event) => {
+        const mouseX = (event.clientX / window.innerWidth) * 2 - 1;
+        const mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        displayMessage(`마우스 클릭 좌표: x=${mouseX.toFixed(2)}, y=${mouseY.toFixed(2)}`);
+      });
+    */
+    animate();
+  </script>
+  </body>
+  </html>
